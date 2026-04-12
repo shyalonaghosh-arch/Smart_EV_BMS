@@ -1,0 +1,66 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#define VOLTAGE_PIN 34
+#define TEMP_PIN 32
+
+// Voltage divider (battery)
+float R1 = 10000.0;
+float R2 = 4700.0;
+
+// Thermistor constants
+float SERIES_RESISTOR = 10000.0;
+float NOMINAL_RESISTANCE = 10000.0;
+float NOMINAL_TEMPERATURE = 25.0;
+float B_COEFFICIENT = 3435.0;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup() {
+  Wire.begin(21, 22);
+  lcd.init();
+  lcd.backlight();
+
+  analogSetAttenuation(ADC_11db);
+
+  lcd.setCursor(0, 0);
+  lcd.print("BMS Starting...");
+  delay(2000);
+}
+
+void loop() {
+  // -------- Voltage --------
+  int adcV = analogRead(VOLTAGE_PIN);
+  float voltage = (adcV / 4095.0) * 3.3;
+  float batteryVoltage = voltage * ((R1 + R2) / R2);
+
+  // -------- Temperature --------
+  int adcT = analogRead(TEMP_PIN);
+  float vOut = (adcT / 4095.0) * 3.3;
+
+  float resistance = SERIES_RESISTOR / ((3.3 / vOut) - 1);
+
+  float steinhart;
+  steinhart = resistance / NOMINAL_RESISTANCE;
+  steinhart = log(steinhart);
+  steinhart /= B_COEFFICIENT;
+  steinhart += 1.0 / (NOMINAL_TEMPERATURE + 273.15);
+  steinhart = 1.0 / steinhart;
+  float temperatureC = steinhart - 273.15;
+
+  // -------- Display --------
+  lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print("V:");
+  lcd.print(batteryVoltage, 2);
+  lcd.print("V");
+
+  lcd.setCursor(0, 1);
+  lcd.print("T:");
+  lcd.print(temperatureC, 1);
+  lcd.print((char)223); // degree symbol
+  lcd.print("C");
+
+  delay(1000);
+}
