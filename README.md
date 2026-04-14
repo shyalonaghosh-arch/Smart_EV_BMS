@@ -16,7 +16,7 @@ NTC thermistor read via ADC. Steinhart-Hart equation (B=3435) converts resistanc
 
 **MOSFET Protection**
 - IRLZ44N (N-ch) on discharge path — ESP32 pulls gate LOW on fault, load disconnects instantly
-- AO3401 (P-ch) on charge path — turns OFF when pack hits ≥ 8.4V, stops charging
+- IRF9540 (P-ch) on charge path — turns OFF when pack hits ≥ 8.4V, stops charging
 - 10Ω gate resistors protect ESP32 GPIOs from switching spikes
 - 220Ω resistors bleed excess charge from higher cell (passive balancing)
 
