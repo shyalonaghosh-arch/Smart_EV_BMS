@@ -1,31 +1,34 @@
 # Smart EV Battery Management System
 
-A BMS prototype on the ESP32-DevKit V1 that monitors a 2S Li-ion pack in real time,
-displaying live voltage and temperature on a 16x2 I2C LCD with MOSFET-based hardware protection.
+A BMS prototype on the ESP32-DevKit V1 that monitors a 2S Li-ion 
+pack in real time with MOSFET-based hardware protection and live 
+display on a 16x2 I2C LCD.
 
 ---
 
 ## How It Works
 
 **Voltage Monitoring**
-A 10kΩ/4.7kΩ voltage divider scales the 8.4V pack down to ESP32-safe levels.
-Firmware reverses the math to display actual battery voltage.
+A 10kΩ/4.7kΩ voltage divider scales the 8.4V pack down to 
+ESP32-safe levels. Firmware reverses the math to recover actual 
+battery voltage.
 
 **Temperature Monitoring**
-NTC thermistor read via ADC. Steinhart-Hart equation (B=3435) converts resistance to °C.
+NTC thermistor read via ADC. Steinhart-Hart equation (B=3435) 
+converts resistance to °C.
 
 **MOSFET Protection**
-- IRLZ44N (N-ch) on discharge path — ESP32 pulls gate LOW on fault, load disconnects instantly
-- IRF9540 (P-ch) on charge path — turns OFF when pack hits ≥ 8.4V, stops charging
+- IRLZ44N (N-ch) on discharge path — turns OFF when voltage
+  drops below 5.0V, disconnecting the load instantly
+- AO3401 (P-ch) on charge path — turns OFF when pack hits
+  ≥ 8.4V, stopping charge current
+- Both turn OFF if temperature exceeds 45°C
 - 10Ω gate resistors protect ESP32 GPIOs from switching spikes
-- 220Ω resistors bleed excess charge from higher cell (passive balancing)
-
-**Fuse**
-1A fuse as last line of defence against catastrophic shorts.
 
 **Capacitors**
-- 100nF ceramic — filters ADC noise
-- 100µF electrolytic — smooths ESP32 current spikes
+- 100nF across ESP32 3.3V and GND — filters ADC noise
+- 100nF across AMS1117 output and GND — filters regulator noise
+- 100µF across battery input and GND — smooths current spikes
 
 ---
 
@@ -37,10 +40,8 @@ NTC thermistor read via ADC. Steinhart-Hart equation (B=3435) converts resistanc
 | NTC Thermistor | NTCLE100E3103JB0 | 1 |
 | Discharge MOSFET | IRLZ44N | 1 |
 | Charge MOSFET | AO3401 / IRF9540N | 1 |
-| Fuse | 1A | 1 |
 | Resistor | 10kΩ | 5 |
 | Resistor | 4.7kΩ | 2 |
-| Resistor | 220Ω | 2 |
 | Resistor | 10Ω | 2 |
 | Capacitor | 100nF 50V ceramic | 2 |
 | Capacitor | 100µF 50V electrolytic | 1 |
@@ -53,10 +54,22 @@ NTC thermistor read via ADC. Steinhart-Hart equation (B=3435) converts resistanc
 
 | GPIO | Connected To |
 |---|---|
-| 34 | Voltage divider |
-| 32 | NTC Thermistor |
+| 34 | Voltage divider output |
+| 32 | NTC Thermistor output |
+| 25 | IRLZ44N gate (discharge control) |
+| 26 | AO3401 gate (charge control) |
 | 21 | SDA (LCD) |
 | 22 | SCL (LCD) |
+
+---
+
+## Protection Thresholds
+
+| Fault | Threshold | Action |
+|---|---|---|
+| Overcharge | ≥ 8.4V | Charge MOSFET OFF |
+| Overdischarge | ≤ 5.0V | Discharge MOSFET OFF |
+| Overtemperature | ≥ 45°C | Both MOSFETs OFF |
 
 ---
 
@@ -67,43 +80,30 @@ NTC thermistor read via ADC. Steinhart-Hart equation (B=3435) converts resistanc
 ---
 
 ## Limitations
-- MOSFET cutoff not yet in firmware
+- Single thermistor — one monitoring point only
 - No current sensing / SOC estimation
 - WiFi unused — local display only
-
----
-
-## Roadmap
-- [ ] Firmware MOSFET cutoff triggers
-- [ ] ACS712 current sensor + SOC via coulomb counting
-- [ ] WiFi dashboard for remote monitoring
-- [ ] Scale to 4S with BQ76930 for real EV use
-
----
 
 ## Future Scope
 
 **Short Term**
-- Implement firmware-level fault detection and automatic MOSFET cutoff
-- Add ACS712 current sensor to enable real-time current monitoring
-- Estimate State of Charge (SOC) using coulomb counting
-- Add audible buzzer alert on thermal or voltage fault
+- Add current sensing via ACS712
+- SOC estimation using coulomb counting
+- Buzzer alert on fault condition
 
 **Medium Term**
-- Build a WiFi-based web dashboard to monitor pack health remotely from any browser
-- Add data logging to SD card or cloud for long-term battery health analysis
-- Implement active cell balancing for better efficiency over passive resistor bleeding
-- Add a dedicated gate driver IC (IR2104) for faster and cleaner MOSFET switching
+- WiFi dashboard accessible from any browser
+- Data logging to SD card
+- Active cell balancing
 
 **Long Term**
-- Upgrade to BQ76930 / BQ76940 IC to support 10S–15S packs for real EV deployment
-- Integrate CAN bus communication to interface with EV motor controllers
-- Design a custom PCB to replace the breadboard — compact, noise-resistant, robust
-- Implement Kalman Filter based SOC estimation for higher accuracy
-- Add cell-level temperature monitoring with multiple thermistors across the pack
-- Develop a mobile app for real-time BMS telemetry and alerts
+- Custom PCB design replacing breadboard
+- Upgrade to 10S pack with BQ76930 for real EV deployment
+- CAN bus communication with motor controller
+- Mobile app for real time telemetry
 
 ---
 
 > Academic prototype — 2S pack simulates an EV battery demonstrating
-> core BMS functions: voltage monitoring, thermal monitoring, and hardware protection.
+> core BMS functions: voltage monitoring, thermal monitoring,
+> and hardware protection via MOSFET switching.
