@@ -1,18 +1,25 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-#define VOLTAGE_PIN 34
-#define TEMP_PIN 32
+#define VOLTAGE_PIN     34
+#define TEMP_PIN        32
+#define DISCHARGE_PIN   25    // IRLZ44N gate
+#define CHARGE_PIN      26    // AO3401 gate
 
-// Voltage divider (battery)
+// Voltage divider
 float R1 = 10000.0;
 float R2 = 4700.0;
 
 // Thermistor constants
-float SERIES_RESISTOR = 10000.0;
+float SERIES_RESISTOR    = 10000.0;
 float NOMINAL_RESISTANCE = 10000.0;
 float NOMINAL_TEMPERATURE = 25.0;
-float B_COEFFICIENT = 3435.0;
+float B_COEFFICIENT      = 3435.0;
+
+// Protection thresholds
+float MAX_VOLTAGE  = 8.4;   // overcharge cutoff
+float MIN_VOLTAGE  = 5.0;   // overdischarge cutoff
+float MAX_TEMP     = 45.0;  // overtemperature cutoff
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -20,8 +27,15 @@ void setup() {
   Wire.begin(21, 22);
   lcd.init();
   lcd.backlight();
-
   analogSetAttenuation(ADC_11db);
+
+  // Set MOSFET pins as output
+  pinMode(DISCHARGE_PIN, OUTPUT);
+  pinMode(CHARGE_PIN, OUTPUT);
+
+  // Default — both MOSFETs ON (normal operation)
+  digitalWrite(DISCHARGE_PIN, HIGH);  // IRLZ44N ON
+  digitalWrite(CHARGE_PIN, LOW);      // AO3401 ON (P-ch logic)
 
   lcd.setCursor(0, 0);
   lcd.print("BMS Starting...");
@@ -37,9 +51,7 @@ void loop() {
   // -------- Temperature --------
   int adcT = analogRead(TEMP_PIN);
   float vOut = (adcT / 4095.0) * 3.3;
-
   float resistance = SERIES_RESISTOR / ((3.3 / vOut) - 1);
-
   float steinhart;
   steinhart = resistance / NOMINAL_RESISTANCE;
   steinhart = log(steinhart);
@@ -48,19 +60,55 @@ void loop() {
   steinhart = 1.0 / steinhart;
   float temperatureC = steinhart - 273.15;
 
+  // -------- Protection Logic --------
+  if (batteryVoltage >= MAX_VOLTAGE) {
+    digitalWrite(CHARGE_PIN, HIGH);     // stop charging
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("OVERCHARGE!");
+    lcd.setCursor(0, 1);
+    lcd.print("Charge stopped");
+    delay(2000);
+    return;
+  }
+
+  if (batteryVoltage <= MIN_VOLTAGE) {
+    digitalWrite(DISCHARGE_PIN, LOW);   // stop discharging
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("LOW BATTERY!");
+    lcd.setCursor(0, 1);
+    lcd.print("Discharge stop");
+    delay(2000);
+    return;
+  }
+
+  if (temperatureC >= MAX_TEMP) {
+    digitalWrite(DISCHARGE_PIN, LOW);   // stop both
+    digitalWrite(CHARGE_PIN, HIGH);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("OVERTEMP!");
+    lcd.setCursor(0, 1);
+    lcd.print("All stopped");
+    delay(2000);
+    return;
+  }
+
+  // -------- Normal Operation — restore MOSFETs --------
+  digitalWrite(DISCHARGE_PIN, HIGH);
+  digitalWrite(CHARGE_PIN, LOW);
+
   // -------- Display --------
   lcd.clear();
-
   lcd.setCursor(0, 0);
   lcd.print("V:");
   lcd.print(batteryVoltage, 2);
   lcd.print("V");
-
   lcd.setCursor(0, 1);
   lcd.print("T:");
   lcd.print(temperatureC, 1);
-  lcd.print((char)223); // degree symbol
+  lcd.print((char)223);
   lcd.print("C");
-
   delay(1000);
 }
